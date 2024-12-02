@@ -1,0 +1,62 @@
+# Marketing Campaign Data Collection
+import pandas as pd
+import matplotlib.pyplot as plt
+from marketing_collector import MarketingDataCollector
+
+# Configuration (store these securely in practice)
+config = {
+    'ga_credentials': 'path/to/credentials.json',
+    'fb_access_token': 'your_token',
+    'fb_app_secret': 'your_secret',
+    'fb_app_id': 'your_app_id',
+    'fb_account_id': 'your_account_id'
+}
+
+# Initialize collector
+collector = MarketingDataCollector(config)
+
+# Define metrics to collect
+ga_metrics = [
+    'ga:sessions',
+    'ga:users',
+    'ga:bounceRate',
+    'ga:pageviewsPerSession'
+]
+
+fb_metrics = [
+    'impressions',
+    'clicks',
+    'spend',
+    'ctr',
+    'cpc'
+]
+
+# Collect data for last 30 days
+end_date = pd.Timestamp.today().strftime('%Y-%m-%d')
+start_date = (pd.Timestamp.today() - pd.Timedelta(days=30)).strftime('%Y-%m-%d')
+
+# Fetch and combine data
+combined_data = collector.combine_data(
+    start_date=start_date,
+    end_date=end_date,
+    ga_metrics=ga_metrics,
+    fb_metrics=fb_metrics
+)
+
+# Basic data exploration
+print("Data shape:", combined_data.shape)
+print("\nColumns:", combined_data.columns.tolist())
+print("\nFirst few rows:")
+display(combined_data.head())
+
+# Create some basic visualizations
+plt.figure(figsize=(12, 6))
+plt.plot(combined_data['date'], combined_data['ga:sessions'], label='Sessions')
+plt.plot(combined_data['date'], combined_data['impressions'], label='FB Impressions')
+plt.title('Website Sessions vs Facebook Impressions')
+plt.xlabel('Date')
+plt.ylabel('Count')
+plt.legend()
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
