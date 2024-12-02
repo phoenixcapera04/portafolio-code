@@ -1,0 +1,168 @@
+# Supply Chain Analytics Portfolio Project
+# This project demonstrates key data science skills including:
+# - Data cleaning and preparation
+# - Exploratory Data Analysis
+# - Time series analysis
+# - Predictive modeling
+# - Data visualization
+
+# Load required libraries
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(plotly)
+library(corrplot)
+library(caret)
+
+# Generate sample supply chain data
+set.seed(123)
+dates <- seq(as.Date("2023-01-01"), as.Date("2023-12-31"), by="day")
+n <- length(dates)
+
+supply_chain_data <- tibble(
+  date = dates,
+  order_id = sprintf("ORD%05d", 1:n),
+  product_category = sample(c("Electronics", "Clothing", "Food", "Furniture"), n, replace=TRUE),
+  quantity = rpois(n, lambda = 50),
+  lead_time = rnorm(n, mean = 5, sd = 1),
+  shipping_cost = rnorm(n, mean = 100, sd = 20),
+  supplier_id = sample(LETTERS[1:5], n, replace=TRUE),
+  delivery_status = sample(c("On Time", "Delayed", "Very Delayed"), n, 
+                          prob = c(0.7, 0.2, 0.1), replace=TRUE),
+  customer_satisfaction = sample(1:5, n, replace=TRUE, prob = c(0.1, 0.1, 0.2, 0.3, 0.3))
+)
+
+# Data Cleaning and Preparation
+clean_data <- supply_chain_data %>%
+  mutate(
+    month = month(date),
+    weekday = wday(date, label = TRUE),
+    is_delayed = ifelse(delivery_status != "On Time", 1, 0),
+    shipping_cost = round(shipping_cost, 2),
+    lead_time = round(lead_time, 1)
+  ) %>%
+  filter(!is.na(shipping_cost), !is.na(lead_time))
+
+# Exploratory Data Analysis
+# 1. Summary statistics
+summary_stats <- clean_data %>%
+  group_by(product_category) %>%
+  summarise(
+    total_orders = n(),
+    avg_quantity = mean(quantity),
+    avg_lead_time = mean(lead_time),
+    avg_shipping_cost = mean(shipping_cost),
+    delay_rate = mean(is_delayed),
+    avg_satisfaction = mean(customer_satisfaction)
+  )
+
+# 2. Time series analysis
+daily_orders <- clean_data %>%
+  group_by(date) %>%
+  summarise(total_quantity = sum(quantity))
+
+# Create time series object
+ts_orders <- ts(daily_orders$total_quantity, frequency = 7)
+
+# Fit ARIMA model
+arima_model <- auto.arima(ts_orders)
+
+# Generate forecasts for next 30 days
+forecast_results <- forecast(arima_model, h = 30)
+
+# 3. Supplier Performance Analysis
+supplier_performance <- clean_data %>%
+  group_by(supplier_id) %>%
+  summarise(
+    total_shipments = n(),
+    avg_lead_time = mean(lead_time),
+    delay_rate = mean(is_delayed),
+    avg_satisfaction = mean(customer_satisfaction)
+  ) %>%
+  arrange(desc(total_shipments))
+
+# 4. Predictive Modeling for Shipping Costs
+# Prepare modeling data
+model_data <- clean_data %>%
+  select(shipping_cost, quantity, lead_time, product_category, supplier_id)
+
+# Convert categorical variables to factors
+model_data$product_category <- as.factor(model_data$product_category)
+model_data$supplier_id <- as.factor(model_data$supplier_id)
+
+# Split data into training and testing sets
+set.seed(123)
+train_index <- createDataPartition(model_data$shipping_cost, p = 0.8, list = FALSE)
+train_data <- model_data[train_index, ]
+test_data <- model_data[-train_index, ]
+
+# Train linear regression model
+lm_model <- train(
+  shipping_cost ~ .,
+  data = train_data,
+  method = "lm",
+  trControl = trainControl(method = "cv", number = 5)
+)
+
+# 5. Visualization Functions
+plot_daily_orders <- function(data) {
+  ggplot(data, aes(x = date, y = total_quantity)) +
+    geom_line(color = "steelblue") +
+    geom_smooth(method = "loess", color = "red") +
+    theme_minimal() +
+    labs(title = "Daily Order Quantities Over Time",
+         x = "Date",
+         y = "Total Quantity")
+}
+
+plot_supplier_performance <- function(data) {
+  ggplot(data, aes(x = reorder(supplier_id, -avg_lead_time), y = avg_lead_time)) +
+    geom_bar(stat = "identity", fill = "steelblue") +
+    geom_text(aes(label = round(avg_lead_time, 1)), vjust = -0.5) +
+    theme_minimal() +
+    labs(title = "Average Lead Time by Supplier",
+         x = "Supplier ID",
+         y = "Average Lead Time (days)")
+}
+
+# Example usage of visualizations
+daily_orders_plot <- plot_daily_orders(daily_orders)
+supplier_performance_plot <- plot_supplier_performance(supplier_performance)
+
+# Generate insights report
+generate_insights_report <- function(data, summary_stats, supplier_performance, lm_model) {
+  cat("Supply Chain Analytics Insights Report\n")
+  cat("=====================================\n\n")
+  
+  cat("1. Overall Performance Metrics:\n")
+  cat("   - Total Orders:", nrow(data), "\n")
+  cat("   - Average Lead Time:", round(mean(data$lead_time), 2), "days\n")
+  cat("   - Overall Delay Rate:", sprintf("%.1f%%", mean(data$is_delayed) * 100), "\n\n")
+  
+  cat("2. Product Category Analysis:\n")
+  print(summary_stats)
+  cat("\n")
+  
+  cat("3. Top Performing Suppliers:\n")
+  print(head(supplier_performance, 3))
+  cat("\n")
+  
+  cat("4. Model Performance:\n")
+  cat("   - R-squared:", sprintf("%.3f", summary(lm_model)$r.squared), "\n")
+  cat("   - RMSE:", sprintf("%.3f", min(lm_model$results$RMSE)), "\n")
+}
+
+# Save results
+save_results <- function() {
+  # Save plots
+  ggsave("daily_orders_plot.png", daily_orders_plot)
+  ggsave("supplier_performance_plot.png", supplier_performance_plot)
+  
+  # Save models
+  saveRDS(lm_model, "shipping_cost_model.rds")
+  saveRDS(arima_model, "time_series_model.rds")
+  
+  # Save processed data
+  write.csv(clean_data, "processed_supply_chain_data.csv")
+  write.csv(summary_stats, "summary_statistics.csv")
+}
