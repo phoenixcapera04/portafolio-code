@@ -1,0 +1,1 @@
+A versatile technology professional transitioning from web development and digital marketing into data science, combining practical business consulting experience with deep technical expertise. Currently pursuing a Master's in Data Science with a focus on delivering data-driven business insights through advanced analytics and cloud infrastructure.
