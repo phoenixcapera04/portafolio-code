@@ -1,0 +1,159 @@
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
+import seaborn as sns
+from datetime import datetime
+import plotly.express as px
+
+class FMCGAnalyzer:
+    """
+    A class for analyzing Fast-Moving Consumer Goods (FMCG) data.
+    Includes sales analysis, customer segmentation, and inventory optimization.
+# Initialize analyzer
+analyzer = FMCGAnalyzer()
+
+# Load the generated sample data
+data = analyzer.load_data('fmcg_sample_data.csv')
+
+# Clean and analyze
+clean_data = analyzer.clean_data()
+results = analyzer.generate_report()
+    """
+    
+    def __init__(self, sales_data=None):
+        """Initialize the analyzer with optional sales data."""
+        self.sales_data = sales_data
+        self.segments = None
+    
+    def load_data(self, filepath):
+        """
+        Load FMCG sales data from CSV file.
+        Expected columns: date, product_id, product_category, quantity, price, customer_id
+        """
+        self.sales_data = pd.read_csv(filepath)
+        self.sales_data['date'] = pd.to_datetime(self.sales_data['date'])
+        return self.sales_data
+    
+    def clean_data(self):
+        """Clean and preprocess the sales data."""
+        # Remove duplicates
+        self.sales_data = self.sales_data.drop_duplicates()
+        
+        # Handle missing values
+        self.sales_data['quantity'] = self.sales_data['quantity'].fillna(0)
+        self.sales_data['price'] = self.sales_data['price'].fillna(
+            self.sales_data.groupby('product_id')['price'].transform('mean')
+        )
+        
+        # Calculate revenue
+        self.sales_data['revenue'] = self.sales_data['quantity'] * self.sales_data['price']
+        
+        return self.sales_data
+    
+    def sales_trends(self, frequency='M'):
+        """
+        Analyze sales trends over time.
+        frequency: 'D' for daily, 'W' for weekly, 'M' for monthly
+        """
+        trends = self.sales_data.groupby(
+            [pd.Grouper(key='date', freq=frequency), 'product_category']
+        )['revenue'].sum().reset_index()
+        
+        return trends
+    
+    def customer_segmentation(self, n_clusters=3):
+        """
+        Segment customers based on RFM (Recency, Frequency, Monetary) analysis.
+        """
+        # Calculate RFM metrics
+        latest_date = self.sales_data['date'].max()
+        
+        rfm = self.sales_data.groupby('customer_id').agg({
+            'date': lambda x: (latest_date - x.max()).days,  # Recency
+            'product_id': 'count',  # Frequency
+            'revenue': 'sum'  # Monetary
+        }).rename(columns={
+            'date': 'recency',
+            'product_id': 'frequency',
+            'revenue': 'monetary'
+        })
+        
+        # Scale the features
+        scaler = StandardScaler()
+        rfm_scaled = scaler.fit_transform(rfm)
+        
+        # Perform clustering
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+        self.segments = kmeans.fit_predict(rfm_scaled)
+        
+        rfm['segment'] = self.segments
+        return rfm
+    
+    def inventory_analysis(self):
+        """
+        Analyze inventory movements and suggest reorder points.
+        """
+        inventory = self.sales_data.groupby('product_id').agg({
+            'quantity': ['sum', 'mean', 'std'],
+            'date': ['min', 'max']
+        })
+        
+        # Calculate days between first and last sale
+        inventory['days_active'] = (
+            inventory[('date', 'max')] - inventory[('date', 'min')]
+        ).dt.days
+        
+        # Calculate daily sales rate
+        inventory['daily_sales_rate'] = (
+            inventory[('quantity', 'sum')] / inventory['days_active']
+        )
+        
+        # Suggest reorder point (mean + 2*std for 95% service level)
+        inventory['reorder_point'] = (
+            inventory[('quantity', 'mean')] + 
+            2 * inventory[('quantity', 'std')]
+        )
+        
+        return inventory
+    
+    def generate_report(self, output_dir='reports'):
+        """
+        Generate a comprehensive analysis report.
+        """
+        # Create reports directory if it doesn't exist
+        import os
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Generate various analyses
+        sales_trend = self.sales_trends()
+        customer_segments = self.customer_segmentation()
+        inventory_status = self.inventory_analysis()
+        
+        # Save results to CSV
+        sales_trend.to_csv(f'{output_dir}/sales_trends.csv', index=False)
+        customer_segments.to_csv(f'{output_dir}/customer_segments.csv')
+        inventory_status.to_csv(f'{output_dir}/inventory_analysis.csv')
+        
+        return {
+            'sales_trends': sales_trend,
+            'customer_segments': customer_segments,
+            'inventory_analysis': inventory_status
+        }
+
+# Example usage
+if __name__ == "__main__":
+    # Initialize analyzer
+    analyzer = FMCGAnalyzer()
+    
+    # Load sample data (replace with your data path)
+    data = analyzer.load_data('fmcg_data.csv')
+    
+    # Clean data
+    clean_data = analyzer.clean_data()
+    
+    # Generate comprehensive report
+    results = analyzer.generate_report()
+    
+    print("Analysis complete! Check the 'reports' directory for detailed results.")
