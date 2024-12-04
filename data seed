@@ -1,0 +1,48 @@
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+
+# Set random seed for reproducibility
+np.random.seed(42)
+
+# Generate sample data
+n_records = 10000
+n_customers = 1000
+n_products = 100
+
+# Date range: Last 2 years
+start_date = datetime(2022, 1, 1)
+date_range = [start_date + timedelta(days=x) for x in range(730)]
+
+# Product categories
+categories = ['Beverages', 'Snacks', 'Dairy', 'Personal Care', 'Household']
+
+# Generate data
+data = {
+    'date': np.random.choice(date_range, n_records),
+    'customer_id': np.random.randint(1, n_customers + 1, n_records),
+    'product_id': np.random.randint(1, n_products + 1, n_records),
+    'product_category': np.random.choice(categories, n_records),
+    'quantity': np.random.randint(1, 10, n_records),
+    'price': np.random.uniform(1.0, 50.0, n_records).round(2),
+    'store_id': np.random.randint(1, 51, n_records)
+}
+
+# Create DataFrame
+df = pd.DataFrame(data)
+
+# Add some seasonality and trends
+df['month'] = df['date'].dt.month
+df.loc[df['product_category'] == 'Beverages', 'quantity'] *= (1 + 0.3 * (df['month'].isin([6, 7, 8])))
+df.loc[df['product_category'] == 'Personal Care', 'quantity'] *= (1 + 0.2 * (df['month'].isin([11, 12])))
+
+# Sort by date
+df = df.sort_values('date')
+
+# Save to CSV
+df.to_csv('fmcg_sample_data.csv', index=False)
+
+print("First few rows of the generated dataset:")
+print(df.head())
+print("\nDataset summary:")
+print(df.describe())
